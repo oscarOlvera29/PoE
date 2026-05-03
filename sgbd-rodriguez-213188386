@@ -1,0 +1,233 @@
+import os
+import sys
+from datetime import datetime, timedelta
+
+# Agregar el directorio raíz al sys.path para importaciones absolutas
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from modelos.catalogo import Catalogo
+from servicios.gestor_cola import GestorCola
+from modelos.libro import LibroDigital, LibroFisico
+from modelos.usuario import Alumno, Profesor
+from modelos.prestamo import Prestamo
+
+ARCHIVO_JSON = "datos/biblioteca_datos.json"
+
+def seed_data(catalogo: Catalogo) -> None:
+    """Inyecta datos de prueba para no iniciar en blanco."""
+    print("\n🌱 [INFO] Generando datos de prueba (Seed)...")
+    
+    try:
+        # Inyectando 5 Libros
+        lib1 = LibroFisico("1984", "George Orwell", "9780451524935", 1949, True, "Estante A", 3)
+        lib2 = LibroDigital("Clean Code", "Robert C. Martin", "9780132350884", 2008, True, "PDF", 5.5, "url.com")
+        lib3 = LibroFisico("El Quijote", "Cervantes", "9788424116270", 1605, True, "Estante B", 1)
+        lib4 = LibroDigital("Python Crash Course", "Eric Matthes", "9781593279288", 2019, True, "EPUB", 10.0, "url.com")
+        lib5 = LibroFisico("Dune", "Frank Herbert", "9780441172719", 1965, True, "Estante C", 2)
+        
+        for libro in [lib1, lib2, lib3, lib4, lib5]:
+            catalogo.agregar_libro(libro)
+
+        # Inyectando 3 Usuarios
+        user1 = Alumno("Juan", "juan@uni.edu", "Sistemas", 3)
+        user2 = Profesor("Dra. Martinez", "martinez@uni.edu", "Física")
+        user3 = Alumno("Maria", "maria@uni.edu", "Derecho", 5)
+        
+        for user in [user1, user2, user3]:
+            catalogo.registrar_usuario(user)
+
+        # Inyectando 2 Préstamos
+        p1 = Prestamo(user1, lib1, "2024-05-01", "2024-05-15")
+        p2 = Prestamo(user2, lib4, "2024-05-02", "2024-05-20")
+        catalogo.registrar_prestamo(p1)
+        catalogo.registrar_prestamo(p2)
+        
+        print("✔️  Datos de prueba cargados exitosamente.")
+    except Exception as e:
+        print(f"⚠️  Hubo un problema al inyectar los datos: {e}")
+
+def mostrar_menu() -> str:
+    print("\n" + "="*45)
+    print(" SGBD - SISTEMA DE GESTIÓN DE BIBLIOTECA")
+    print("="*45)
+    print("  [1] Agregar libro")
+    print("  [2] Buscar libro")
+    print("  [3] Registrar usuario")
+    print("  [4] Prestar libro")
+    print("  [5] Devolver libro")
+    print("  [6] Ver cola de espera")
+    print("  [7] Reportes")
+    print("  [0] Salir")
+    print("="*45)
+    return input("👉 Elige una opción: ").strip()
+
+def main() -> None:
+    catalogo = Catalogo()
+    cola = GestorCola()
+
+    print("Iniciando sistema...")
+    try:
+        catalogo.cargar_json(ARCHIVO_JSON)
+        if not catalogo.libros:
+            seed_data(catalogo)
+            
+    except FileNotFoundError:
+        print(f"\n⚠️  Archivo '{ARCHIVO_JSON}' no encontrado.")
+        print("Es la primera vez que se ejecuta el programa.")
+        seed_data(catalogo)
+        
+    except Exception as e:
+        print(f"\n❌ Error crítico al leer el archivo JSON: {e}")
+        print("Iniciando con catálogo en blanco.")
+
+    while True:
+        opcion = mostrar_menu()
+        
+        try:
+            match opcion:
+                case '1':
+                    print("\n--- AGREGAR LIBRO ---")
+                    tipo = input("Tipo de libro (1: Físico, 2: Digital): ").strip()
+                    titulo = input("Título: ").strip()
+                    autor = input("Autor: ").strip()
+                    isbn = input("ISBN-13: ").strip()
+                    anio = int(input("Año: ").strip())
+                    
+                    if tipo == '1':
+                        ubicacion = input("Ubicación: ").strip()
+                        ejemplares = int(input("Número de ejemplares: ").strip())
+                        libro = LibroFisico(titulo, autor, isbn, anio, True, ubicacion, ejemplares)
+                    else:
+                        formato = input("Formato (PDF/EPUB/MOBI): ").strip()
+                        tamano = float(input("Tamaño (MB): ").strip())
+                        url = input("URL de descarga: ").strip()
+                        libro = LibroDigital(titulo, autor, isbn, anio, True, formato, tamano, url)
+                        
+                    catalogo.agregar_libro(libro)
+                    print(f"✅ Libro '{titulo}' agregado con éxito.")
+                    
+                case '2':
+                    print("\n--- BUSCAR LIBRO ---")
+                    query = input("Ingresa título o autor a buscar: ")
+                    resultados = catalogo.buscar(query)
+                    if resultados:
+                        for r in resultados:
+                            print(f" - {r}")
+                    else:
+                        print("❌ No se encontraron libros.")
+                        
+                case '3':
+                    print("\n--- REGISTRAR USUARIO ---")
+                    tipo = input("Tipo de usuario (1: Alumno, 2: Profesor): ").strip()
+                    nombre = input("Nombre completo: ").strip()
+                    email = input("Email: ").strip()
+                    
+                    if tipo == '1':
+                        carrera = input("Carrera: ").strip()
+                        semestre = int(input("Semestre: ").strip())
+                        usuario = Alumno(nombre, email, carrera, semestre)
+                    else:
+                        depto = input("Departamento: ").strip()
+                        usuario = Profesor(nombre, email, depto)
+                        
+                    catalogo.registrar_usuario(usuario)
+                    print(f"✅ Usuario '{nombre}' registrado con éxito.")
+                    
+                case '4':
+                    print("\n--- PRESTAR LIBRO ---")
+                    email = input("Email del usuario: ").strip()
+                    isbn = input("ISBN del libro: ").strip()
+                    
+                    usuario = catalogo.usuarios.get(email)
+                    if not usuario:
+                        print("❌ Usuario no encontrado.")
+                        continue
+                        
+                    libro = next((l for l in catalogo.libros if l.isbn == isbn), None)
+                    if not libro:
+                        print("❌ Libro no encontrado.")
+                        continue
+                        
+                    if not usuario.puede_pedir_prestado():
+                        print("❌ El usuario ha alcanzado su límite de préstamos.")
+                        continue
+                        
+                    if not libro.disponible:
+                        print("⚠️ El libro no está disponible actualmente.")
+                        espera = input("¿Desea unirse a la cola de espera? (s/n): ").strip().lower()
+                        if espera == 's':
+                            cola.encolar_solicitud(email, isbn)
+                            print("✅ Añadido a la cola de espera.")
+                        continue
+                        
+                    hoy = datetime.now().strftime("%Y-%m-%d")
+                    devolucion = (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
+                    prestamo = Prestamo(usuario, libro, hoy, devolucion)
+                    catalogo.registrar_prestamo(prestamo)
+                    print(f"✅ Préstamo registrado hasta el {devolucion}.")
+                    
+                case '5':
+                    print("\n--- DEVOLVER LIBRO ---")
+                    email = input("Email del usuario: ").strip()
+                    isbn = input("ISBN del libro: ").strip()
+                    
+                    prestamo_activo = next(
+                        (p for p in catalogo.prestamos if p.activo and p.usuario.email == email and p.libro.isbn == isbn),
+                        None
+                    )
+                    
+                    if not prestamo_activo:
+                        print("❌ No se encontró un préstamo activo para este usuario y libro.")
+                        continue
+                        
+                    catalogo.procesar_devolucion(prestamo_activo)
+                    print("✅ Libro devuelto con éxito.")
+                    
+                    siguiente = cola.atender_siguiente()
+                    if siguiente:
+                        print(f"🔔 Aviso: Se puede prestar un libro al usuario {siguiente[0]} que estaba en espera (ISBN deseado: {siguiente[1]}).")
+                    
+                case '6':
+                    print("\n--- COLA DE ESPERA ---")
+                    elementos = cola.ver_cola()
+                    if not elementos:
+                        print("La cola de espera está vacía.")
+                    else:
+                        print(f"Hay {len(elementos)} personas en espera:")
+                        for i, (email_esp, isbn_esp) in enumerate(elementos, 1):
+                            print(f"{i}. Usuario: {email_esp} | Libro ISBN: {isbn_esp}")
+                    
+                case '7':
+                    print("\n--- REPORTES ---")
+                    estadisticas = catalogo.generar_reporte()
+                    print("\nEstadísticas actuales:")
+                    for clave, valor in estadisticas.items():
+                        titulo_bonito = clave.replace("_", " ").capitalize()
+                        print(f" 📊 {titulo_bonito}: {valor}")
+                        
+                case '0':
+                    print("\n💾 Guardando información antes de salir...")
+                    try:
+                        catalogo.guardar_json(ARCHIVO_JSON)
+                        print("✔️  ¡Datos guardados con éxito! Hasta la vista.")
+                    except Exception as e:
+                        print(f"❌ Error al intentar guardar los datos: {e}")
+                    break 
+                    
+                case _:
+                    print("\n⚠️  Opción no válida. Por favor elige un número del 0 al 7.")
+                    
+        except ValueError as ve:
+            print(f"\n❌ ERROR DE VALOR: Has ingresado un dato incorrecto.")
+            print(f"Detalle: {ve}")
+            
+        except KeyError as ke:
+            print(f"\n❌ ERROR DE BÚSQUEDA: No se pudo encontrar el dato.")
+            print(f"Detalle: {ke}")
+            
+        except Exception as e:
+            print(f"\n💥 ERROR INESPERADO: Ocurrió un fallo en la matriz.")
+            print(f"Detalle técnico: {e}")
+
+if __name__ == "__main__":
+    main()

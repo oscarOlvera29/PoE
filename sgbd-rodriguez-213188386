@@ -231,3 +231,139 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+##Test_catalago
+import pytest
+from modelos.usuario import Alumno, Profesor, Administrador
+
+def test_alumno_limites():
+    a = Alumno("Juan", "j@uni.edu", "Sistemas", 1)
+    a.prestamos_activos = 2
+    assert a.puede_pedir_prestado() == True
+    a.prestamos_activos = 3
+    assert a.puede_pedir_prestado() == False
+
+def test_profesor_limites():
+    p = Profesor("Profe", "p@uni.edu", "Matemáticas")
+    p.prestamos_activos = 7
+    assert p.puede_pedir_prestado() == True
+    p.prestamos_activos = 8
+    assert p.puede_pedir_prestado() == False
+
+def test_admin_limites():
+    adm = Administrador("Admin", "admin@uni.edu", "Nivel 1")
+    adm.prestamos_activos = 100
+    assert adm.puede_pedir_prestado() == True
+
+##test_libro
+import pytest
+from modelos.libro import LibroFisico, LibroDigital
+
+def test_libro_fisico_creacion():
+    l = LibroFisico("Test", "Autor", "1234567890123", 2020, True, "A1", 5)
+    assert l.titulo == "Test"
+    assert l.anio == 2020
+    assert l.ubicacion == "A1"
+    assert l.num_ejemplares == 5
+
+def test_libro_digital_creacion():
+    l = LibroDigital("Test", "Autor", "1234567890123", 2020, True, "PDF", 5.5, "url.com")
+    assert l.formato == "PDF"
+    assert l.tamano_mb == 5.5
+
+def test_libro_anio_invalido():
+    with pytest.raises(ValueError):
+        LibroFisico("Test", "Autor", "1234567890123", 1000, True, "A1", 5)
+
+##calculo_multas
+"""Módulo para calcular multas de préstamos atrasados."""
+
+from datetime import datetime
+from modelos.prestamo import Prestamo
+
+def calcular_multa_prestamo(prestamo: Prestamo, tarifa_diaria: float = 10.0) -> float:
+    """Calcula la multa si la fecha actual sobrepasa la fecha de devolución."""
+    if not prestamo.activo:
+        return 0.0
+        
+    hoy = datetime.now()
+    try:
+        fecha_dev = datetime.strptime(prestamo.fecha_devolucion, "%Y-%m-%d")
+        if hoy > fecha_dev:
+            dias_retraso = (hoy - fecha_dev).days
+            return dias_retraso * tarifa_diaria
+    except ValueError:
+        pass
+    return 0.0
+
+##estadisticas
+from collections import Counter, defaultdict
+from typing import List, Dict, Any, Tuple
+
+class Estadisticas:
+    def libro_mas_prestado(self, historial_prestamos: List[dict]) -> Tuple[str, int]:
+        isbns = [prestamo["isbn"] for prestamo in historial_prestamos]
+        conteo = Counter(isbns)
+        
+        if not conteo:
+            return ("Ninguno", 0)
+            
+        return conteo.most_common(1)[0]
+
+    def distribucion_por_genero(self, catalogo_libros: List[dict]) -> Dict[str, int]:
+        distribucion = defaultdict(int)
+        for libro in catalogo_libros:
+            genero = libro.get("genero", "Desconocido")
+            distribucion[genero] += 1
+            
+        return dict(distribucion)
+
+##gestor_cola 
+from collections import deque
+from typing import Tuple, Optional
+
+class GestorCola:
+    def __init__(self) -> None:
+        self._cola = deque()
+        self._usuarios_esperando = set()
+
+    def encolar_solicitud(self, email_usuario: str, isbn_libro: str) -> None:
+        if email_usuario in self._usuarios_esperando:
+            print("El usuario ya está en la lista de espera.")
+            return
+
+        solicitud = (email_usuario, isbn_libro)
+        self._cola.append(solicitud)
+        self._usuarios_esperando.add(email_usuario)
+
+    def atender_siguiente(self) -> Optional[Tuple[str, str]]:
+        if not self._cola:
+            return None
+            
+        solicitud_atendida = self._cola.popleft()
+        self._usuarios_esperando.remove(solicitud_atendida[0])
+        return solicitud_atendida
+
+    def ver_cola(self) -> list:
+        return list(self._cola)
+##historial
+from typing import Any
+
+class HistorialAcciones:
+    def __init__(self) -> None:
+        self._pila: list[dict[str, Any]] = []
+
+    def registrar_accion(self, accion: str, admin: str) -> None:
+        registro = {
+            "accion": accion,
+            "admin": admin
+        }
+        self._pila.append(registro)
+
+    def deshacer_ultima_accion(self) -> dict[str, Any]:
+        if not self._pila:
+            return {"error": "No hay acciones registradas"}
+            
+        ultima_accion = self._pila.pop()
+        print(f"Deshaciendo acción: {ultima_accion['accion']}")
+        return ultima_accion
